@@ -1,0 +1,39 @@
+<form (submit)="register()">
+  <div class="form-group">
+    <label for="name">First Name</label>
+    <input
+      type="text"
+      class="form-control"
+      id="FirstName"
+      placeholder="Enter First Name"
+      [(ngModel)]="student.firstName"
+      name="FirstName"
+    />
+  </div>
+
+  <div class="form-group">
+    <label for="name">Last Name</label>
+    <input
+      type="text"
+      class="form-control"
+      id="LastName"
+      placeholder="Enter Last Name"
+      [(ngModel)]="student.lastName"
+      name="LastName"
+    />
+  </div>
+
+  <div class="form-group">
+    <label for="name">Email</label>
+    <input
+      type="text"
+      class="form-control"
+      id="Email"
+      placeholder="Enter Email"
+      [(ngModel)]="student.email"
+      name="Email"
+    />
+  </div>
+
+  <button type="submit" class="btn btn-primary">Submit</button>
+</form>

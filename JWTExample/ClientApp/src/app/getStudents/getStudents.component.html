@@ -1,0 +1,14 @@
+<table class="table table-hover table-bordered">
+  <tr>
+    <th>ID</th>
+    <th>FirstName</th>
+    <th>Last Name</th>
+    <th>Email</th>
+  </tr>
+  <tr *ngFor="let student of students">
+    <td>{{ student.id }}</td>
+    <td>{{ student.firstName }}</td>
+    <td>{{ student.lastName }}</td>
+    <td>{{ student.email }}</td>
+  </tr>
+</table>
