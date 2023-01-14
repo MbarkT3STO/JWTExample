@@ -23,8 +23,11 @@ export class RegisterComponent implements OnInit {
 
           const token = data.token;
           const expiration = data.expiration;
+          const refreshToken = data.refreshToken;
+
           localStorage.setItem('token', token);
           localStorage.setItem('expiration', expiration);
+          localStorage.setItem('refreshToken', refreshToken);
         },
         (error: any) => {
           alert('Error: ' + error.message);

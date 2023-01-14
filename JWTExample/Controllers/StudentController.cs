@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using JWTExample.EFCore;
 using JWTExample.Entities;
+using JWTExample.Identity;
 using JWTExample.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -20,10 +21,10 @@ namespace JWTExample.Controllers;
 public class StudentController : ControllerBase
 {
     readonly AppDbContext _dbContext;
-    readonly UserManager<IdentityUser> _userManager;
-    readonly SignInManager<IdentityUser> _signInManager;
+    readonly UserManager<AppUser> _userManager;
+    readonly SignInManager<AppUser> _signInManager;
 
-    public StudentController(AppDbContext context, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager)
+    public StudentController(AppDbContext context, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager)
     {
         _dbContext = context;
         _userManager = userManager;
@@ -34,7 +35,7 @@ public class StudentController : ControllerBase
     public async Task<IActionResult> Register([FromBody] Student student)
     {
         // create user
-        var user = new IdentityUser { UserName = student.Email, Email = student.Email };
+        var user = new AppUser { UserName = student.Email, Email = student.Email };
         var result = await _userManager.CreateAsync(user, "P@ssw0rd");
         if (!result.Succeeded)
         {
@@ -56,7 +57,7 @@ public class StudentController : ControllerBase
             issuer: "https://localhost:7183",
             audience: "https://localhost:7183",
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(30),
+            expires: DateTime.UtcNow.AddMinutes(5),
             signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes("superSecretKey@345")), SecurityAlgorithms.HmacSha256)
         );
 
@@ -68,35 +69,27 @@ public class StudentController : ControllerBase
         });
     }
 
-    [HttpPost]
+    [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginModel model)
     {
+
         var result = await _signInManager.PasswordSignInAsync(model.UserName, model.Password, false, false);
         if (!result.Succeeded)
         {
-            return BadRequest();
+            return BadRequest("Invalid username or password.");
         }
 
         var user = await _userManager.FindByNameAsync(model.UserName);
-        var claims = new[]
-        {
-        new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
-        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
 
-        var token = new JwtSecurityToken(
-            issuer: "https://localhost:7183",
-            audience: "https://localhost:7183",
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(30),
-            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes("superSecretKey@345")), SecurityAlgorithms.HmacSha256)
-        );
+        var token = await GenerateAccessToken(user);
+        var refreshToken = await GenerateRefreshToken(user);
 
         return Ok(new
         {
-            token = new JwtSecurityTokenHandler().WriteToken(token),
-            expiration = DateTime.Now.AddMinutes(30),
-            userName = user.UserName
+            token,
+            expiration = DateTime.Now.ToLocalTime().AddMinutes(5),
+            userName = user.UserName,
+            refreshToken
         });
     }
 
@@ -107,4 +100,79 @@ public class StudentController : ControllerBase
         var students = _dbContext.Students.ToList();
         return Ok(students);
     }
+
+    [HttpPost("RefreshToken")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        var user = await _userManager.FindByNameAsync(request.UserName);
+
+        if (user == null)
+            return BadRequest("Invalid USER");
+
+        var refreshToken = _dbContext.RefreshTokens.FirstOrDefault(x => x.UserId == user.Id && x.Token == request.RefreshToken);
+
+        if (refreshToken == null)
+            return BadRequest("Invalid REFRESH TOKEN");
+
+        if (refreshToken.IsUsed)
+            return BadRequest("Refresh token is used");
+
+        if (refreshToken.IsInvalidated)
+            return BadRequest("Refresh token is invalidated");
+
+        if (refreshToken.ExpiresOn < DateTime.Now)
+            return BadRequest("Refresh token is expired");
+
+        refreshToken.IsUsed = true;
+        _dbContext.RefreshTokens.Update(refreshToken);
+        await _dbContext.SaveChangesAsync();
+
+        var newToken = await GenerateAccessToken(user);
+
+        return Ok(new
+        {
+            token = newToken,
+            expiration = DateTime.Now.ToLocalTime().AddMinutes(5),
+            userName = user.UserName,
+            refreshToken = request.RefreshToken
+        });
+
+    }
+
+    private async Task<string> GenerateAccessToken(AppUser user)
+    {
+        //Get the user role and add it to the claims
+        var userRole = (await _userManager.GetRolesAsync(user)).FirstOrDefault();
+
+        var claims = new[]{
+            new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, userRole)
+        };
+
+        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("superSecretKey@345"));
+        var signingCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+
+        var jwt = new JwtSecurityToken(issuer: "https://localhost:7183", audience: "https://localhost:7183", claims: claims, expires: DateTime.Now.ToLocalTime().AddMinutes(5), signingCredentials: signingCredentials);
+        var token = new JwtSecurityTokenHandler().WriteToken(jwt);
+
+        return token;
+    }
+
+    private async Task<string> GenerateRefreshToken(AppUser user)
+    {
+        var refreshToken = new RefreshToken
+        {
+            Token = Guid.NewGuid().ToString(),
+            UserId = user.Id,
+            CreatedOn = DateTime.Now,
+            ExpiresOn = DateTime.Now.ToLocalTime().AddHours(1)
+        };
+
+        _dbContext.RefreshTokens.Add(refreshToken);
+        await _dbContext.SaveChangesAsync();
+
+        return refreshToken.Token;
+    }
 }
+

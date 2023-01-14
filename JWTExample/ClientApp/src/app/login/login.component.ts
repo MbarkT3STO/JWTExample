@@ -15,17 +15,20 @@ export class LoginComponent implements OnInit {
   ngOnInit() {}
 
   loginSubmit() {
-    this.http.post('https://localhost:7183/api/student', this.login).subscribe(
-      (response: any) => {
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('username', response.userName);
-        localStorage.setItem('expiration', response.expiration);
+    this.http
+      .post('https://localhost:7183/api/student/login', this.login)
+      .subscribe(
+        (response: any) => {
+          localStorage.setItem('token', response.token);
+          localStorage.setItem('username', response.userName);
+          localStorage.setItem('expiration', response.expiration);
+          localStorage.setItem('refreshToken', response.refreshToken);
 
-        alert('Login successful');
-      },
-      (error) => {
-        alert('Error: ' + error.message);
-      }
-    );
+          alert('Login successful');
+        },
+        (error) => {
+          alert('Error: ' + error.message);
+        }
+      );
   }
 }
